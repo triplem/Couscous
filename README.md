@@ -1,121 +1,81 @@
 ---
-template: home
+layout: home
 ---
 
-Couscous generates a website (for [Github pages](http://pages.github.com/)) from your markdown documentation.
+Couscous generates a [GitHub pages](http://pages.github.com/) website from your markdown documentation.
 
+[![Build Status](https://travis-ci.org/CouscousPHP/Couscous.svg?branch=master)](https://travis-ci.org/CouscousPHP/Couscous)
+[![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/CouscousPHP/Couscous/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/CouscousPHP/Couscous/?branch=master)
+[![Code Coverage](https://scrutinizer-ci.com/g/CouscousPHP/Couscous/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/CouscousPHP/Couscous/?branch=master)
+[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/CouscousPHP/Couscous.svg)](http://isitmaintained.com/project/CouscousPHP/Couscous "Average time to resolve an issue")
+[![Percentage of issues still open](http://isitmaintained.com/badge/open/CouscousPHP/Couscous.svg)](http://isitmaintained.com/project/CouscousPHP/Couscous "Percentage of issues still open")
 
-## Introduction
+[![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/CouscousPHP/Couscous)
 
-[Github pages](http://pages.github.com/) are good, but what do you do:
+**Everything is documented on [couscous.io](http://couscous.io/).**
 
-* if you want to write your documentation in **Markdown** and not in HTML?
-* if you want your documentation to be transformed into a **website**?
-* if you want to **keep the documentation with your code**, versioned in the repository?
+What follows is the documentation for contributors.
 
-Couscous is here to help you. **Your documentation is written in Markdown,
-versioned in your repository with your source, compiled to HTML and published to *Github pages*.**
+## How Couscous works?
 
+Couscous was designed to be as simple as possible. By embracing simplicity, it becomes extremely simple to extend.
 
-## How does it work
+### Website generation
 
-1. you write your README and documentation in `.md` files (Markdown) on your repository
-2. you generate you website with *Couscous*
-  - it turns `.md` files into HTML files
-  - HTML files are committed to the `gh-pages` branch of your repository, and thus are published as a website by Github
-3. profit!
+The website generation is composed of a list of **steps** to process the `Project` model object:
 
-
-## Getting started
-
-### Installation
-
-You can [download it manually](http://mnapoli.fr/Couscous/couscous.phar) or install it through CLI:
-
-```
-wget http://mnapoli.fr/Couscous/couscous.phar
-chmod +x couscous.phar
-sudo mv couscous.phar /usr/local/bin/couscous
+```php
+interface Step
+{
+    /**
+     * Process the given project.
+     *
+     * @param Project $project
+     */
+    public function __invoke(Project $project);
+}
 ```
 
+Steps are very granular, thus extremely easy to write and test. For example:
 
-### Configuration
+- `LoadConfig`: loads the `couscous.yml` config file
+- `RunBowerInstall`
+- `LoadMarkdownFiles`: load the content of all the `*.md` files in memory
+- `RenderMarkdown`: render the markdown content
+- `WriteFiles`: write the in-memory processed files to the target directory
+- …
 
-You can define options in a `couscous.yml` file at the root of your repository.
+For example, here is a step that would preprocess Markdown files to put the word "Couscous" in bold:
 
-Simple example:
+```php
+class PutCouscousInBold implements \Couscous\Step
+{
+    public function __invoke(Project $project)
+    {
+        /** @var MarkdownFile[] $markdownFiles */
+        $markdownFiles = $project->findFilesByType('Couscous\Model\MarkdownFile');
 
-```yaml
-baseUrl: http://mnapoli.github.io/Couscous
+        foreach ($markdownFiles as $file) {
+            $file->content = str_replace('Couscous', '**Couscous**', $file->content);
+        }
+    }
+}
 ```
 
-That configuration file is optional. See the [complete reference](docs/configuration.md) for more information.
+Couscous uses [PHP-DI](http://php-di.org/) for wiring everything together with dependency injection.
 
+The full list of steps is configured in [`src/Application/config.php`](src/Application/config.php).
 
-### Website template
+### Website deployment
 
-Couscous will take every `*.md` file it finds in your repository and convert it to `.html` files, keeping the same directory structure
-(`README.md` files a renamed to `index.html`).
+Couscous deploys by cloning (in a temp directory) the current repository, checking out the `gh-pages` branch, generating the website inside it, committing and pushing.
 
-In order to have those HTML files look like real web pages, you can write a *template* for these pages.
-Templates are written with Twig, and are extremely easy to write. The template files should be in a `website/` directory
-at the root of your repository (this path is customizable).
+In the future, Couscous will support several deployment strategies.
 
-Basic example (`website/page.twig`):
+## Contributing
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-    <head>
-        <title>My project!</title>
-    </head>
-    <body>
-        {{ content|raw }}
-    </body>
-</html>
-```
+See the [CONTRIBUTING](CONTRIBUTING.md) file.
 
-Variables available in the template are:
+## License
 
-- `content`: Markdown turned to HTML. Make sur to echo it with `{{ content|raw }}` else the HTML will be escaped.
-- `baseUrl`: Base URL, if defined in `couscous.yml`. When previewing with `couscous preview`, the base URL will always be `http://localhost:8000`. Useful for writing links.
-
-You can write different templates (for example to make the home page different).
-For this, read the [template documentation](docs/templates.md).
-
-If your template has assets (CSS, JS, images, …), put them in `website/public`. The content of this directory will be
-copied in the generated website.
-
-
-### CLI Usage
-
-Use the following commands in your project's repository.
-
-```
-$ couscous generate
-```
-
-Generates the website in `.couscous/generated`. Can be used to check if the website generates correctly.
-
-```
-$ couscous preview
-```
-
-Generates the website and starts a webserver so that you can preview the website at http://localhost:8000.
-If files are changed, the website will be regenerated.
-
-```
-$ couscous deploy
-```
-
-Generates the website and publish it in the `gh-pages` branch of your git repository.
-This will remove everything that exists in the `gh-pages` branch, commit in your name, and **push** to GitHub.
-
-**The `gh-pages` branch must already exist.** You can use the official
-[Automatic Page Generator](https://help.github.com/articles/creating-pages-with-the-automatic-generator#the-automatic-page-generator) for this.
-
-
-## Read more
-
-* [Documentation](docs/)
-* [Building the phar](docs/contributing.md)
+Couscous is released under the MIT License.

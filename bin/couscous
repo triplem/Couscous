@@ -6,17 +6,38 @@
  * @author Matthieu Napoli <matthieu@mnapoli.fr>
  */
 
-use Couscous\CLI\DeployCommand;
-use Couscous\CLI\GenerateCommand;
-use Couscous\CLI\PreviewCommand;
+use Couscous\Application\ContainerFactory;
 use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Output\ConsoleOutput;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+if (version_compare(phpversion(), '5.4', '<')) {
+    die('You must use PHP >= 5.4 in order to use Couscous. Please upgrade your PHP version.');
+}
 
-$application = new Application('Couscous', '1.0');
+if (!ini_get('date.timezone')) {
+    date_default_timezone_set('UTC');
+}
 
-$application->add(new GenerateCommand);
-$application->add(new PreviewCommand());
-$application->add(new DeployCommand());
+// Phar
+if (isset($include)) {
+    require_once $include . '/vendor/autoload.php';
+} elseif (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+    require_once __DIR__ . '/../../../autoload.php';
+}
 
+$output = new ConsoleOutput();
+
+$factory = new ContainerFactory();
+$container = $factory->createContainer();
+
+// Set the logger
+$logger = $container->make('Symfony\Component\Console\Logger\ConsoleLogger', [
+    'output' => $output,
+]);
+$container->set('Psr\Log\LoggerInterface', $logger);
+
+/** @var Application $application */
+$application = $container->get('application');
 $application->run();
